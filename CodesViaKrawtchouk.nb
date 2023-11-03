@@ -1,0 +1,217 @@
+ClearAll["Global`*"];
+
+(* Relevant parameters *)
+r = 9;
+k = (r + 1)/2;
+l = (r - 1)/2;
+m = 2^r;
+
+(* General modules for Boolean functions *)
+Bin[n_, k_] := Module[ {seq, i = n, j = 1, k0 = k},
+  seq = {};
+  While[ i > 1, 
+   
+   AppendTo[seq, Mod[i, 2]];
+   i = IntegerPart[i/2];
+   j++;
+   ];
+  If[n != 0, AppendTo[seq, 1], AppendTo[seq, 0]];
+  For[, j < k0, j++, AppendTo[seq, 0]];
+  Reverse[seq]
+  ]
+
+Cube[dime_] := Module[{l = dime, i, cube, Half0, Half1},
+  cube = {};
+  For[i = 0, i < 2^l, i++,
+   AppendTo[cube, Bin[i, l]];
+   ];
+  cube
+  ]
+
+HyperCube = Cube[r];
+HyperCube1 = Cube[k];
+HyperCube2 = Cube[l];
+
+RBin[n_, k_] := Module[ {seq, i = n, j = 1, k0 = k},
+  seq = {};
+  While[ i > 1, 
+    AppendTo[seq, Mod[i, 2]];
+    i = IntegerPart[i/2];
+    j++;
+    ]
+   If[n != 0, AppendTo[seq, 1], AppendTo[seq, 0]];
+  For[, j < k0, j++, AppendTo[seq, 0]];
+  seq
+  ]
+
+RCube[dime_] := Module[{l = dime, i, cube},
+  cube = {};
+  For[i = 0, i < 2^l, i++,
+   AppendTo[cube, RBin[i, l]];
+   ];
+  cube
+  ]
+
+toDec[binary_, dimen_] := Module[{Dim = dimen, dec, list = binary, i},
+  dec = 0;
+  For[i = 1, i <= Dim, i++,
+   dec = dec + list[[Dim + 1 - i]]*2^(i - 1);
+   ];
+  dec
+  ]
+
+weight[bool_, dime_] := 
+ Module[{M = dime, SBOX = bool, i = 0, sa, j, a, x},
+  For[j = 1, j <= M, j++,
+   If[SBOX[[j]] == 1, i++;,];
+   ];
+  i
+  ]
+
+ANF[func_, dime_] := 
+ Module[{RHyperCube, Dim = dime, TT = func, list, i, j},
+  list = TT;
+  RHyperCube = RCube[Dim];
+  For[i = Dim, i >= 1, i--,
+   For[j = 1, j <= 2^Dim, j++,
+     If[RHyperCube[[j]][[i]] != 0, 
+       list = ReplacePart[list, j -> Mod[list[[toDec[Reverse[RHyperCube[[j]]], Dim] + 1]] + list[[toDec[Reverse[ReplacePart[RHyperCube[[j]], i -> 0]], Dim] + 1]], 2]];,
+       ];
+     ];
+   ];
+  list
+  ]
+
+Walsh[func_, dime_] := 
+ Module[{RHyperCube, Dim = dime, TT = func, list, pre, i, j},
+  list = (-1)^TT;
+  pre = list;
+  RHyperCube = RCube[Dim];
+  For[i = Dim, i >= 1, i--,
+   For[j = 1, j <= 2^Dim, j++,
+    If[RHyperCube[[j]][[i]] == 0,
+      pre = ReplacePart[pre, j -> (list[[j]] + list[[toDec[Reverse[ReplacePart[RHyperCube[[j]], i -> 1]], Dim] + 1]])];,
+      pre = ReplacePart[pre, j -> (- list[[j]] + list[[toDec[Reverse[ReplacePart[RHyperCube[[j]], i -> 0]], Dim] + 1]])];
+      ];
+    ];
+   list = pre;
+   ];
+  list
+  ]
+
+DotProduct[a_, b_, c_] := Module[ {j = c, i, x = a, y = b},
+  Mod[Sum[x[[i]]*y[[i]], {i, 1, j}], 2]
+  ];
+
+nl[fun_, dim_] := 2^(dim - 1) - (1/2)*Max[Abs[Walsh[fun, dim]]];
+
+LinearFunctions[dimi_] := Module[{lineales, n = dimi, i, m, HyperCube},
+   lineales = {};
+   m = 2^n;
+   HyperCube = Cube[n];
+   For[i = 1, i <= m, i++,
+    lineales = AppendTo[lineales, Table[Mod[DotProduct[HyperCube[[i]], HyperCube[[j]], n], 2], {j, 1, m}]];
+    ];
+   lineales
+   ];
+
+(* Module to create linear codes for verification *)
+LinearCode[TT_] := Module[{TT0 = TT, w, lin, i, Code, weights},
+   lin = LinearFunctions[r];
+   Code := {};
+   w := Table[2^(r - 1), {i, 1, 2^r - 1}];
+   For[i = 1, i <= m, i++,
+    Code = AppendTo[Code, Mod[TT0 + lin[[i]], 2]];
+    w = AppendTo[w, weight[Mod[TT0 + lin[[i]], 2], m]];
+    ];
+   {Code, w}
+   ];
+
+(* Module to check minimality *)
+IsMinimal[Co_, we_] := Module[{Code = Co, w = we, F, i, j},
+   F = 1;
+   For[i = 2, i <= Length[Code] && F != 0, i++,
+    For[j = 2, j <= Length[Code] && i != j, j++,
+      If[weight[Mod[Code[[i]] + Code[[j]], 2], m] == w[[i]] - w[[j]], 
+        F = 0; Print["No minimal by:", i, " ", j]; Break[];,
+        ];
+      ];
+    ];
+   F
+   ];
+
+(* Create subset U, change the "if" condition to obtain different subsets *)
+U := {};
+For[i = 1, i <= 2^k, i++,
+  If[weight[HyperCube1[[i]], k] >= 2,
+    AppendTo[U, {i}];
+    ];
+  ];
+U;
+
+(* Check if U has enough points *)
+Length[U] >= 2^(k - 1) + 1
+
+(* Create function phi *)
+Complem = {1, 1};
+While[DeleteDuplicates[Complem] != Complem ,
+  Complem = RandomChoice[Drop[HyperCube2, 1], 2^k - Length[U]];
+  ];
+Complem;
+
+Zero = Table[0, {i, 1, l}];
+Phi = Table[0, {i, 1, 2^k}];
+Phi = ReplacePart[Phi, U -> Zero];
+
+cont = 1;
+For[i = 1, i <= 2^k, i++,
+  If[Phi[[i]] == 0, Phi[[i]] = Complem[[cont]]; cont++;, ];
+  ];
+Phi;
+
+(* Create truth table of the function f *)
+TT0 := {};
+For[i = 1, i <= 2^r, i++,
+  I1 = toDec[Take[HyperCube[[i]], k], k];
+  I2 = Drop[HyperCube[[i]], k];
+  If[I1 == 0, g = 1;, g = 1;]; (* Modify the values of g to get different functions, it is set to be the constant one function *)
+  AppendTo[TT0, Mod[ DotProduct[ I2, Phi[[I1 + 1]], l] + g, 2]];
+  ];
+
+(* Get Walsh/weight distribution *)
+wb = 2^(r - 1) - (1/2)*Walsh[TT0, r];
+b = DeleteDuplicates[Sort[wb]]
+Count[wb, #] & /@ b
+
+(* Check if code is wide *)
+Min[b]/Max[b] > 1/2
+
+(* Verify weight distribution of code *)
+Code = LinearCode[TT0];
+weights = Sort[DeleteDuplicates[Code[[2]]]];
+wd = Table[Count[Code[[2]], weights[[j]]], {j, 1, Length[weights]}]
+
+(* Verify minimality *)
+IsMinimal[Code[[1]], Code[[2]]];
+
+(* Create truth table of derivative of f at direction gam, change this parameter to obtain different derivatives *)
+TT := {};
+gam = Join[Table[1, {i, 1, k}], Table[0, {i, 1, l}]];
+pos = toDec[gam, r] + 1;
+For[i = 1, i <= 2^r, i++,
+  AppendTo[TT, Mod[ TT0[[i]] + TT0[[toDec[Mod[Bin[i - 1, r] + gam, 2], r] + 1]], 2]];
+  ];
+wb = 2^(r - 1) - (1/2)*Walsh[TT, r];
+b = DeleteDuplicates[Sort[wb]]
+Count[wb, #] & /@ b
+
+(* Check if derivative code is wide *)
+Min[b]/Max[b] > 1/2
+
+(* Verify weight distribution of derivative code *)
+CodeD = LinearCode[TT];
+weightsD = Sort[DeleteDuplicates[CodeD[[2]]]];
+wdD = Table[Count[CodeD[[2]], weightsD[[j]]], {j, 1, Length[weightsD]}]
+
+(* Verify minimality of derivative code *)
+IsMinimal[CodeD[[1]], CodeD[[2]]];
